@@ -119,6 +119,8 @@ pub const Headers = std.StringArrayHashMap([]const u8);
 
 /// Response allows to set the status code and content of the response
 pub const Response = struct {
+    pub const Status = StatusCode;
+
     /// status code of the response, 200 by default
     status_code: StatusCode = .ok,
     /// StringHashMap([]const u8) with key and value of headers
@@ -129,6 +131,12 @@ pub const Response = struct {
     is_flushed: bool,
     /// Response body, can be written to through the writer interface
     body: std.ArrayList(u8).Writer,
+
+    /// True if the connection must be closed, false otherwise.
+    /// When the response is provided to the handler, it is true if either:
+    /// * the client requests the connection to close
+    /// * std.io.is_async is false
+    close: bool,
 
     pub const Error = net.Stream.WriteError || error{OutOfMemory};
 
@@ -184,7 +192,11 @@ pub const Response = struct {
             try socket.writeAll("Content-Type: text/plain; charset=utf-8\r\n");
         }
 
-        try socket.writeAll("Connection: keep-alive\r\n");
+        if (self.close) {
+            try socket.writeAll("Connection: close\r\n");
+        } else {
+            try socket.writeAll("Connection: keep-alive\r\n");
+        }
 
         try socket.writeAll("\r\n");
         if (body.len > 0) try socket.writeAll(body);
